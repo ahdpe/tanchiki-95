@@ -1,0 +1,2583 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <!-- "Add to Home Screen" opens the game as a full-screen app (no address bar), on iPhone and Android -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Танчики 95">
+  <meta name="theme-color" content="#14161b">
+  <link rel="manifest" href="manifest.webmanifest">
+  <title>ТАНЧИКИ: НАЗАД В 95 — Настольная диорама</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    :root {
+      --vvh: 100dvh;
+      --chassis-bg: #14161b;
+      --chassis-border: #2e3442;
+      --btn-grad-top: #2c3240;
+      --btn-grad-bot: #1c202a;
+      --btn-border: #3f475a;
+      --btn-shadow: #0c0e12;
+      --btn-text: #d4dae6;
+      --amber-led: #f59e0b;
+      --amber-led-glow: rgba(245, 158, 11, 0.6);
+      --gold-accent: #f6c344;
+      --intro-progress: 0%;
+    }
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #0b0c0e;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #e0e4eb;
+      touch-action: none;
+    }
+    main {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      height: var(--vvh, 100dvh); /* the visible height on phones (100vh ignores the address bar) */
+      overflow: hidden;
+    }
+    #application-canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      height: var(--vvh, 100dvh);
+      outline: none;
+    }
+    .hidden {
+      display: none !important;
+    }
+
+    /* ==========================================================================
+       CINEMATIC INTRO STAGE (Pre-rendered Cycles 1080p -> Live PlayCanvas Handoff)
+       ========================================================================== */
+    .intro-stage {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 40;
+      background: #090807;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 1;
+      transition: opacity 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+      pointer-events: auto;
+    }
+    .intro-stage.handoff-dissolve {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .intro-stage.hidden {
+      display: none !important;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .intro-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center center;
+      display: block;
+      background: #090807;
+    }
+    @media (max-aspect-ratio: 11/10) {
+      .intro-video {
+        object-fit: contain;
+      }
+    }
+    /* the two films of the test build (assets/intro): a film fills a window of its own shape, and is shown whole (black bars) in the other shape,
+       which is what a phone turned during the intro gets: the film chosen at the start plays on */
+    .intro-video[data-orient='landscape'] { object-fit: cover; }
+    .intro-video[data-orient='portrait'] { object-fit: contain; }
+    @media (max-aspect-ratio: 11/10) {
+      .intro-video[data-orient='landscape'] { object-fit: contain; }
+      .intro-video[data-orient='portrait'] { object-fit: cover; }
+    }
+
+    .handoff-warm-glow {
+      position: absolute;
+      inset: 0;
+      z-index: 35;
+      pointer-events: none;
+      opacity: 0;
+      background: radial-gradient(circle at 50% 54%, rgba(255, 206, 132, 0.16) 0%, rgba(245, 158, 11, 0.05) 55%, rgba(10, 9, 8, 0.0) 100%);
+      transition: opacity 0.65s ease-out;
+    }
+    .handoff-warm-glow.active {
+      opacity: 1;
+    }
+
+    /* Intro HUD (Skip Button, Progress Bar, Autoplay / Reduced-Motion Gate) */
+    .intro-hud {
+      position: absolute;
+      inset: 0;
+      z-index: 45;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: max(16px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+    }
+    .intro-top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .intro-date-stamp {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.78rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(246, 195, 68, 0.88);
+      background: rgba(14, 15, 19, 0.68);
+      border: 1px solid rgba(246, 195, 68, 0.28);
+      padding: 6px 12px;
+      border-radius: 5px;
+      backdrop-filter: blur(6px);
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+    }
+    .intro-bottom-bar {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 14px;
+      position: relative;
+    }
+    .intro-progress-track {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: -8px;
+      height: 3px;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .intro-progress-fill {
+      height: 100%;
+      width: var(--intro-progress, 0%);
+      background: linear-gradient(90deg, #d97706 0%, #f6c344 100%);
+      transition: width 0.12s linear;
+    }
+    .btn-skip-intro {
+      pointer-events: auto;
+      background: rgba(18, 21, 28, 0.82);
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      color: #f1f5f9;
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      padding: 9px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.65);
+      transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+    }
+    .credits-details { margin-top: 10px; font-size: 0.74rem; color: #c9d1dc; }
+    .credits-details summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
+    .credits-body { max-height: 32vh; overflow: auto; line-height: 1.45; }
+    .credits-body ul { margin: 4px 0 8px 16px; padding: 0; }
+    .credits-body a { color: #ffd24a; }
+    .credits-note { opacity: 0.8; }
+    .btn-intro-mute { padding: 8px 12px; min-width: 44px; min-height: 40px; justify-content: center; font-size: 1.05rem; }
+    .btn-intro-mute.hidden { display: none; }
+    .btn-skip-intro:hover {
+      background: rgba(34, 40, 52, 0.94);
+      border-color: var(--gold-accent);
+      color: #ffffff;
+    }
+    .btn-skip-intro:active {
+      transform: translateY(1px);
+    }
+    .skip-key-hint {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.68rem;
+      color: #94a3b8;
+      background: rgba(255, 255, 255, 0.08);
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+
+    /* Autoplay Blocked / Reduced-Motion Prompt Card */
+    .intro-gate-card {
+      position: absolute;
+      inset: 0;
+      z-index: 48;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, rgba(16, 18, 24, 0.68) 0%, rgba(10, 11, 15, 0.88) 100%);
+      padding: 20px;
+    }
+    .intro-gate-card.hidden {
+      display: none !important;
+    }
+    .intro-gate-panel {
+      max-width: 440px;
+      width: 100%;
+      background: linear-gradient(180deg, rgba(30, 34, 44, 0.96) 0%, rgba(18, 20, 26, 0.96) 100%);
+      border: 1px solid var(--chassis-border);
+      border-top: 3px solid var(--gold-accent);
+      border-radius: 10px;
+      padding: 24px 26px;
+      text-align: center;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(10px);
+    }
+    .intro-gate-title {
+      font-size: 1.05rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      color: var(--gold-accent);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
+    .intro-gate-desc {
+      font-size: 0.82rem;
+      color: #cbd5e1;
+      line-height: 1.5;
+      margin-bottom: 18px;
+    }
+    .intro-gate-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .btn-primary-gold {
+      background: linear-gradient(180deg, #f6c344 0%, #d9a016 100%);
+      border: 1px solid #fde047;
+      border-bottom: 2px solid #926909;
+      color: #12151b;
+      font-size: 0.86rem;
+      font-weight: 700;
+      padding: 11px 18px;
+      border-radius: 6px;
+      cursor: pointer;
+      letter-spacing: 0.03em;
+      transition: filter 0.15s ease, transform 0.1s ease;
+    }
+    .btn-primary-gold:hover {
+      filter: brightness(1.06);
+    }
+    .btn-secondary-dark {
+      background: rgba(34, 39, 50, 0.9);
+      border: 1px solid var(--btn-border);
+      color: #d4dae6;
+      font-size: 0.80rem;
+      font-weight: 600;
+      padding: 9px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .btn-secondary-dark:hover {
+      background: rgba(48, 55, 70, 0.95);
+      color: #fff;
+    }
+
+    /* ==========================================================================
+       BOARD VIEW PERIPHERAL UI OVERLAY & PHASE 6 STAGE 1 GAMEPLAY HUD
+       ========================================================================== */
+    .ui-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 20;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 12px 16px;
+      opacity: 1;
+      transition: opacity 0.45s ease;
+    }
+    .ui-overlay.ui-hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .ui-overlay.force-no-ui {
+      display: none !important;
+    }
+
+    /* Top Bar: Left Hardware Nameplate + Right Stage 1 Tactical Telemetry & Actions */
+    .hud-top-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      width: 100%;
+      flex-wrap: wrap;
+      pointer-events: none;
+    }
+
+    .hardware-badge {
+      background: linear-gradient(180deg, rgba(36, 40, 50, 0.90) 0%, rgba(20, 23, 29, 0.90) 100%);
+      border: 1px solid var(--chassis-border);
+      border-radius: 6px;
+      padding: 7px 13px;
+      pointer-events: auto;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.55);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .badge-text-col {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .badge-title-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .badge-title {
+      font-size: 0.86rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gold-accent);
+      text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+    }
+    .status-led {
+      width: 8px;
+      height: 8px;
+      background: var(--amber-led);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--amber-led-glow);
+      display: inline-block;
+      animation: pulse-led 2s infinite ease-in-out;
+    }
+    @keyframes pulse-led {
+      0%, 100% { opacity: 0.85; filter: brightness(1.0); }
+      50% { opacity: 1.0; filter: brightness(1.3); }
+    }
+    .badge-subtitle {
+      font-size: 0.64rem;
+      color: #8c94a4;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+    }
+
+    /* Prominent START STAGE 1 Call-to-Action Button */
+    .btn-start-stage1 {
+      background: linear-gradient(180deg, #f6c344 0%, #d99b14 100%);
+      border: 1px solid #fef08a;
+      border-bottom: 2px solid #854d0e;
+      color: #111318;
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      padding: 8px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      box-shadow: 0 0 16px rgba(246, 195, 68, 0.45), 0 3px 8px rgba(0, 0, 0, 0.5);
+      transition: transform 0.1s ease, filter 0.15s ease;
+      white-space: nowrap;
+    }
+    .btn-start-stage1:hover {
+      filter: brightness(1.08);
+    }
+    .btn-start-stage1:active {
+      transform: translateY(1px);
+    }
+
+    /* Right Tactical Telemetry Strip */
+    .game-telemetry-strip {
+      background: linear-gradient(180deg, rgba(28, 32, 41, 0.92) 0%, rgba(16, 18, 24, 0.92) 100%);
+      border: 1px solid var(--chassis-border);
+      border-radius: 7px;
+      padding: 6px 11px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      pointer-events: auto;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.55);
+      flex-wrap: wrap;
+    }
+    .hud-metric {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+    .hud-metric-label {
+      font-size: 0.56rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: #8c94a4;
+      text-transform: uppercase;
+    }
+    .hud-metric-val {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.86rem;
+      font-weight: 800;
+      color: #f8fafc;
+      letter-spacing: 0.05em;
+    }
+    .hud-metric-val.gold {
+      color: var(--gold-accent);
+    }
+    .hud-lives-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .life-tank-icon {
+      font-size: 0.76rem;
+      transition: opacity 0.2s ease, filter 0.2s ease;
+    }
+    .life-tank-icon.lost {
+      opacity: 0.22;
+      filter: grayscale(1);
+    }
+
+    /* 20 Enemy Reserve Miniature Pips (2 rows x 10 cols) */
+    .hud-enemies-wrap {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .enemy-pips-grid {
+      display: grid;
+      grid-template-columns: repeat(10, 6px);
+      grid-template-rows: repeat(2, 6px);
+      gap: 2px;
+    }
+    .enemy-pip {
+      width: 6px;
+      height: 6px;
+      border-radius: 1px;
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .enemy-pip.active {
+      background: #ef4444;
+      border-color: #fca5a5;
+      box-shadow: 0 0 4px rgba(239, 68, 68, 0.5);
+    }
+
+    .hud-actions-group {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    /* Center State Modal / Banner (READY, PAUSED, STAGE_CLEAR, GAME_OVER) */
+    .game-state-modal {
+      align-self: center;
+      margin: auto;
+      pointer-events: auto;
+      background: linear-gradient(180deg, rgba(26, 30, 39, 0.95) 0%, rgba(15, 17, 23, 0.96) 100%);
+      border: 1px solid var(--chassis-border);
+      border-top: 3px solid var(--gold-accent);
+      border-radius: 10px;
+      padding: 20px 26px;
+      max-width: 420px;
+      width: calc(100% - 32px);
+      max-height: calc(var(--vvh, 100dvh) - 16px);
+      overflow-y: auto;
+      text-align: center;
+      box-shadow: 0 18px 44px rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(10px);
+    }
+    .game-state-modal.ready-banner {
+      pointer-events: none;
+      padding: 14px 24px;
+      max-width: 360px;
+      background: linear-gradient(180deg, rgba(24, 28, 36, 0.90) 0%, rgba(14, 16, 22, 0.90) 100%);
+    }
+    .game-state-modal.victory-card {
+      border-top-color: #22c55e;
+    }
+    .game-state-modal.defeat-card {
+      border-top-color: #ef4444;
+    }
+    .game-modal-badge {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.14em;
+      color: #94a3b8;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+    }
+    .game-modal-title {
+      font-size: 1.25rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      color: var(--gold-accent);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+    }
+    .victory-card .game-modal-title {
+      color: #4ade80;
+    }
+    .defeat-card .game-modal-title {
+      color: #f87171;
+    }
+    .game-modal-desc {
+      font-size: 0.80rem;
+      color: #cbd5e1;
+      line-height: 1.45;
+      margin-bottom: 14px;
+    }
+    .ready-banner .game-modal-desc {
+      margin-bottom: 0;
+    }
+    .game-modal-stats {
+      background: rgba(10, 12, 16, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-bottom: 14px;
+      font-size: 0.78rem;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      color: #cbd5e1;
+    }
+    .stat-row.total {
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+      padding-top: 5px;
+      margin-top: 2px;
+      color: var(--gold-accent);
+      font-size: 0.84rem;
+    }
+    .game-modal-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    /* Result cards (pause / stage cleared / game over / campaign): a title, a few numbers, buttons side by side */
+    .game-state-modal.compact-card {
+      max-width: 340px;
+      padding: 16px 18px 14px;
+    }
+    .compact-card .game-modal-badge,
+    .compact-card .game-modal-desc:empty {
+      display: none;
+    }
+    .compact-card .game-modal-title {
+      font-size: 1.15rem;
+      margin-bottom: 10px;
+    }
+    .compact-card .game-modal-desc {
+      font-size: 0.78rem;
+      margin: -4px 0 10px;
+    }
+    .compact-card .game-modal-stats {
+      background: none;
+      border: 0;
+      padding: 0;
+      margin-bottom: 12px;
+      gap: 4px;
+    }
+    .compact-card .game-modal-actions {
+      flex-direction: row;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .compact-card .game-modal-actions > button {
+      flex: 1 1 0;
+      min-width: 0;
+      white-space: nowrap;
+      padding-left: 10px;
+      padding-right: 10px;
+    }
+    .compact-card .game-modal-actions.many > .btn-primary-gold {
+      flex-basis: 100%;
+    }
+    .recap-line {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 0.82rem;
+      color: #94a3b8;
+    }
+    .recap-line strong {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.95rem;
+      color: #f8fafc;
+    }
+    .recap-line.score strong {
+      color: var(--gold-accent);
+      font-size: 1.1rem;
+    }
+    .recap-line .p1 {
+      color: var(--gold-accent);
+      font-weight: 800;
+    }
+    .recap-line .p2 {
+      color: #4ade80;
+      font-weight: 800;
+    }
+    @media (max-height: 520px) and (orientation: landscape) {
+      .game-state-modal.compact-card {
+        padding: 12px 16px 12px;
+        max-height: calc(100dvh - 16px);
+        overflow-y: auto;
+      }
+      .compact-card .game-modal-title {
+        margin-bottom: 6px;
+      }
+      .compact-card .game-modal-stats {
+        margin-bottom: 8px;
+      }
+    }
+
+    /* Mobile Multi-Touch D-Pad & Fire Button */
+    .touch-controls-layer {
+      display: none;
+      justify-content: space-between;
+      align-items: flex-end;
+      width: 100%;
+      padding: 0 6px 8px 6px;
+      pointer-events: none;
+      margin-top: auto;
+    }
+    @media (max-width: 920px), (pointer: coarse) {
+      .touch-controls-layer.gameplay-active {
+        display: flex;
+      }
+    }
+    .touch-controls-layer.force-touch.gameplay-active {
+      display: flex;
+    }
+
+    .touch-dpad {
+      position: relative;
+      width: 132px;
+      height: 132px;
+      pointer-events: auto;
+      touch-action: none;
+    }
+    .dpad-btn {
+      position: absolute;
+      width: 44px;
+      height: 44px;
+      background: rgba(30, 35, 46, 0.86);
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      border-radius: 8px;
+      color: #f1f5f9;
+      font-size: 1.0rem;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(6px);
+      touch-action: none;
+    }
+    .dpad-btn.pressed, .dpad-btn:active {
+      background: var(--gold-accent);
+      color: #111318;
+      border-color: #fef08a;
+    }
+    .dpad-up { top: 0; left: 44px; }
+    .dpad-down { bottom: 0; left: 44px; }
+    .dpad-left { top: 44px; left: 0; }
+    .dpad-right { top: 44px; right: 0; }
+
+    .btn-touch-fire {
+      pointer-events: auto;
+      touch-action: none;
+      width: 84px;
+      height: 84px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #ef4444 0%, #991b1b 100%);
+      border: 2px solid #fca5a5;
+      color: #ffffff;
+      font-size: 0.82rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      box-shadow: 0 6px 20px rgba(220, 38, 38, 0.55), inset 0 2px 4px rgba(255, 255, 255, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 14px;
+    }
+    .btn-touch-fire.pressed, .btn-touch-fire:active {
+      transform: scale(0.95);
+      background: radial-gradient(circle at 35% 30%, #f97316 0%, #b91c1c 100%);
+      border-color: #fde047;
+    }
+
+    /* Bottom Dock Bar (Unobtrusive edge navigation, never covers the 13x13 board) */
+    .bottom-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      width: 100%;
+      gap: 10px;
+      pointer-events: none;
+      flex-wrap: wrap;
+    }
+
+    .controls-dock {
+      background: linear-gradient(180deg, rgba(30, 34, 43, 0.94) 0%, rgba(18, 20, 26, 0.94) 100%);
+      border: 1px solid var(--chassis-border);
+      border-radius: 8px;
+      padding: 5px 8px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      pointer-events: auto;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65);
+      flex-wrap: wrap;
+    }
+
+    .dock-divider {
+      width: 1px;
+      height: 20px;
+      background: #333a49;
+      margin: 0 2px;
+    }
+
+    /* Tactile Push Buttons */
+    .tactile-btn {
+      background: linear-gradient(180deg, var(--btn-grad-top) 0%, var(--btn-grad-bot) 100%);
+      border: 1px solid var(--btn-border);
+      border-bottom: 2px solid var(--btn-shadow);
+      color: var(--btn-text);
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 6px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      box-shadow: 0 2px 0 var(--btn-shadow), 0 3px 6px rgba(0, 0, 0, 0.4);
+      transition: all 0.1s ease;
+      letter-spacing: 0.02em;
+    }
+    .tactile-btn:hover {
+      background: linear-gradient(180deg, #3d4557 0%, #242936 100%);
+      color: #ffffff;
+    }
+    .tactile-btn:active {
+      transform: translateY(1px);
+      box-shadow: 0 1px 0 var(--btn-shadow);
+    }
+    .tactile-btn.active {
+      background: linear-gradient(180deg, #f6c344 0%, #d9a016 100%);
+      color: #12151b;
+      font-weight: 700;
+      border-color: #fde047;
+      border-bottom-color: #926909;
+      box-shadow: 0 2px 0 #926909, 0 0 10px rgba(246, 195, 68, 0.4);
+    }
+    .tactile-btn.btn-nostalgia {
+      border-color: rgba(246, 195, 68, 0.55);
+      color: #fde68a;
+    }
+
+    /* Controls Hint Overlay */
+    .controls-hint {
+      font-size: 0.66rem;
+      color: #94a3b8;
+      background: rgba(14, 16, 20, 0.80);
+      border: 1px solid #232733;
+      border-radius: 4px;
+      padding: 5px 9px;
+      pointer-events: auto;
+      align-self: center;
+      backdrop-filter: blur(4px);
+    }
+
+    /* Telemetry Badge */
+    .telemetry-badge {
+      background: rgba(16, 18, 22, 0.88);
+      border: 1px solid #282d38;
+      border-radius: 5px;
+      padding: 5px 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.68rem;
+      color: #8c94a4;
+      display: flex;
+      gap: 10px;
+      pointer-events: auto;
+      backdrop-filter: blur(6px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+    .telemetry-badge span {
+      color: #38bdf8;
+    }
+
+    .dev-only {
+      display: none !important;
+    }
+    body.dev-mode .dev-only {
+      display: flex !important;
+    }
+    body.dev-mode button.dev-only {
+      display: inline-flex !important;
+    }
+    body.dev-mode button.dev-only.hidden,
+    body.dev-mode .dev-only.hidden {
+      display: none !important;
+    }
+
+    /* Compact Audio/Settings Popover & Gameplay Camera Popover */
+    .audio-mixer-popover,
+    .camera-settings-popover {
+      position: absolute;
+      top: 58px;
+      right: 16px;
+      z-index: 30;
+      width: 284px;
+      background: linear-gradient(180deg, rgba(26, 30, 39, 0.96) 0%, rgba(15, 17, 23, 0.96) 100%);
+      border: 1px solid var(--chassis-border);
+      border-top: 2px solid var(--gold-accent);
+      border-radius: 8px;
+      padding: 12px 14px;
+      pointer-events: auto;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(10px);
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      font-size: 0.72rem;
+    }
+    .mixer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 800;
+      color: var(--gold-accent);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 5px;
+    }
+    .mixer-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .mixer-row-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: #cbd5e1;
+      font-weight: 600;
+    }
+    .mixer-slider {
+      width: 100%;
+      accent-color: var(--gold-accent);
+      cursor: pointer;
+      height: 5px;
+    }
+    .mixer-check {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+    .mixer-select {
+      width: 100%;
+      background: rgba(15, 18, 25, 0.95);
+      border: 1px solid var(--btn-border);
+      color: #f1f5f9;
+      font-size: 0.70rem;
+      font-weight: 600;
+      padding: 5px 8px;
+      border-radius: 5px;
+      cursor: pointer;
+      outline: none;
+    }
+    .mixer-select:focus {
+      border-color: var(--gold-accent);
+    }
+    .mixer-divider {
+      height: 1px;
+      background: rgba(255, 255, 255, 0.08);
+      margin: 2px 0;
+    }
+    .mixer-admin-block {
+      display: contents;
+    }
+    .mixer-admin-tag {
+      font-size: 0.56rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--gold-accent);
+      margin-left: 4px;
+    }
+    .camera-hint-note {
+      font-size: 0.64rem;
+      color: #94a3b8;
+      line-height: 1.35;
+    }
+
+    /* World-Anchored Floating Score Popups Layer (+100, +200, +500, 1UP) */
+    .score-popups-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 24;
+    }
+    .score-popup-badge {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 1.08rem;
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      padding: 3px 9px;
+      border-radius: 6px;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.95), 0 0 8px rgba(0, 0, 0, 0.85);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.65);
+      white-space: nowrap;
+      will-change: transform, opacity;
+    }
+    .score-popup-badge.variant-score {
+      color: #fef08a;
+      background: rgba(20, 23, 31, 0.88);
+      border: 1.5px solid #f6c344;
+    }
+    .score-popup-badge.variant-bonus {
+      color: #67e8f9;
+      background: rgba(12, 30, 58, 0.92);
+      border: 1.5px solid #38bdf8;
+      font-size: 1.16rem;
+    }
+    .score-popup-badge.variant-life {
+      color: #86efac;
+      background: rgba(14, 42, 26, 0.92);
+      border: 1.5px solid #4ade80;
+      font-size: 1.18rem;
+    }
+
+    /* In-Board Cinematic Showcase / Game Over Orbit Skip Pill */
+    .cinematic-skip-banner {
+      align-self: center;
+      margin-top: auto;
+      margin-bottom: 10px;
+      pointer-events: auto;
+      background: rgba(16, 19, 26, 0.88);
+      border: 1px solid rgba(246, 195, 68, 0.55);
+      color: #fef08a;
+      font-size: 0.74rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      padding: 7px 16px;
+      border-radius: 99px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(8px);
+      z-index: 26;
+      transition: transform 0.1s ease, border-color 0.15s ease;
+    }
+    .cinematic-skip-banner:hover {
+      border-color: #fde047;
+      color: #ffffff;
+    }
+
+    /* Developer-Only Pacing Comparison Panel (hidden in production unless ?dev=1) */
+    .dev-pacing-panel {
+      position: absolute;
+      top: 62px;
+      left: 16px;
+      z-index: 28;
+      width: 310px;
+      background: rgba(12, 15, 20, 0.90);
+      border: 1px solid rgba(56, 189, 248, 0.45);
+      border-left: 3px solid #38bdf8;
+      border-radius: 7px;
+      padding: 9px 12px;
+      pointer-events: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.66rem;
+      color: #cbd5e1;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(6px);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .dev-panel-title {
+      font-weight: 800;
+      color: #38bdf8;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .dev-kv {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .dev-kv strong {
+      color: #f8fafc;
+    }
+
+    @media (max-width: 760px) {
+      .controls-hint, .telemetry-badge, .enemy-pips-grid, .dev-pacing-panel {
+        display: none !important;
+      }
+      .ui-overlay {
+        padding: max(6px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+      }
+      .hud-actions-group {
+        margin-left: auto;
+      }
+      .tactile-btn {
+        font-size: 0.64rem;
+        padding: 4px 7px;
+      }
+      .hardware-badge {
+        padding: 5px 10px;
+      }
+      .badge-title {
+        font-size: 0.74rem;
+      }
+      .badge-subtitle {
+        display: none;
+      }
+      .game-telemetry-strip {
+        padding: 5px 8px;
+        gap: 8px;
+      }
+      .hud-metric-val {
+        font-size: 0.76rem;
+      }
+      .audio-mixer-popover,
+      .camera-settings-popover {
+        right: 10px;
+        width: calc(100vw - 20px);
+        max-width: 300px;
+      }
+    }
+
+    /* Phase 7 Title Menu, 2P Co-Op HUD, Stage Select & Score Recap Styles */
+    .hud-p2-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-left: 1px solid rgba(74, 222, 128, 0.28);
+      padding-left: 10px;
+    }
+    .hud-metric-val.jade {
+      color: #4ade80;
+    }
+    .title-menu-card {
+      align-self: center;
+      margin: auto;
+      pointer-events: auto;
+      background: linear-gradient(180deg, rgba(24, 28, 38, 0.95) 0%, rgba(13, 15, 21, 0.96) 100%);
+      border: 1px solid var(--chassis-border);
+      border-top: 3px solid var(--gold-accent);
+      border-radius: 12px;
+      padding: 20px 24px;
+      max-width: 460px;
+      width: calc(100% - 28px);
+      text-align: center;
+      box-shadow: 0 20px 48px rgba(0, 0, 0, 0.82);
+      backdrop-filter: blur(12px);
+      z-index: 25;
+      max-height: calc(100vh - 110px);
+      max-height: calc(100dvh - 110px);
+      overflow-y: auto;
+    }
+    .title-menu-header {
+      margin-bottom: 12px;
+    }
+    .title-menu-sub {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.14em;
+      color: #94a3b8;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .title-menu-heading {
+      font-size: 1.32rem;
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      color: var(--gold-accent);
+      text-transform: uppercase;
+    }
+    .title-stage-picker-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      background: rgba(10, 12, 17, 0.72);
+      border: 1px solid rgba(246, 195, 68, 0.25);
+      border-radius: 7px;
+      padding: 8px 12px;
+      margin-bottom: 12px;
+      font-size: 0.76rem;
+    }
+    .stage-step-btn {
+      background: rgba(40, 46, 58, 0.95);
+      border: 1px solid var(--btn-border);
+      color: #f8fafc;
+      font-weight: 800;
+      font-size: 0.80rem;
+      padding: 4px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .stage-step-btn:hover {
+      border-color: var(--gold-accent);
+      color: var(--gold-accent);
+    }
+    .stage-picker-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      text-align: center;
+      flex: 1;
+    }
+    .stage-picker-title {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-weight: 800;
+      font-size: 0.86rem;
+      color: var(--gold-accent);
+    }
+    .stage-picker-meta {
+      font-size: 0.66rem;
+      color: #94a3b8;
+    }
+    .title-menu-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .btn-coop-jade {
+      background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
+      border: 1px solid #86efac;
+      border-bottom: 2px solid #14532d;
+      color: #09140d;
+      font-size: 0.84rem;
+      font-weight: 800;
+      padding: 10px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      letter-spacing: 0.03em;
+    }
+    .btn-coop-jade:hover {
+      filter: brightness(1.07);
+    }
+    .btn-continue-amber {
+      background: linear-gradient(180deg, #38bdf8 0%, #0284c7 100%);
+      border: 1px solid #bae6fd;
+      border-bottom: 2px solid #075985;
+      color: #081420;
+      font-size: 0.82rem;
+      font-weight: 800;
+      padding: 10px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      letter-spacing: 0.03em;
+    }
+    .title-menu-grid-btns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+      margin-top: 2px;
+    }
+    .howto-modal {
+      position: absolute;
+      inset: 0;
+      z-index: 36;
+      background: rgba(8, 10, 14, 0.82);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      pointer-events: auto;
+    }
+    .howto-panel {
+      background: linear-gradient(180deg, rgba(26, 30, 40, 0.98) 0%, rgba(14, 16, 22, 0.98) 100%);
+      border: 1px solid var(--chassis-border);
+      border-top: 3px solid var(--gold-accent);
+      border-radius: 10px;
+      padding: 20px 24px;
+      max-width: 520px;
+      width: 100%;
+      max-height: calc(100vh - 48px);
+      max-height: calc(100dvh - 48px);
+      overflow-y: auto;
+      box-shadow: 0 20px 48px rgba(0, 0, 0, 0.85);
+      font-size: 0.76rem;
+      color: #cbd5e1;
+      line-height: 1.45;
+    }
+    .howto-section {
+      background: rgba(10, 12, 17, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      padding: 9px 12px;
+      margin-bottom: 9px;
+    }
+    .howto-section h3 {
+      color: var(--gold-accent);
+      font-size: 0.76rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+    .recap-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.74rem;
+      margin-top: 4px;
+    }
+    .recap-table th, .recap-table td {
+      padding: 4px 6px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      text-align: right;
+    }
+    .recap-table th:first-child, .recap-table td:first-child {
+      text-align: left;
+    }
+    .recap-bonus-badge {
+      margin-top: 6px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: rgba(246, 195, 68, 0.16);
+      border: 1px solid rgba(246, 195, 68, 0.45);
+      color: #fde047;
+      font-weight: 700;
+      font-size: 0.74rem;
+    }
+
+    /* Loading Overlay */
+    .loading-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #0b0c0e;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+      transition: opacity 0.4s ease;
+    }
+    .loading-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+      display: none !important;
+    }
+    .spinner {
+      width: 44px;
+      height: 44px;
+      border: 4px solid rgba(246, 195, 68, 0.15);
+      border-top-color: var(--gold-accent);
+      border-radius: 50%;
+      animation: spin 1s infinite linear;
+      margin-bottom: 16px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .loading-text {
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      font-size: 0.88rem;
+      color: #cbd5e1;
+      text-align: center;
+      padding: 0 16px;
+    }
+
+    /* the yellow tank with bricks and smoke stands to the left of the lettering (loading screen only) */
+    .loading-brand { display: flex; align-items: center; justify-content: center; gap: clamp(2px, 1vw, 10px); margin: 0 0 clamp(14px, 3.5vh, 26px); max-width: 94vw; }
+    .loading-brand .loading-logo { margin: 0; }
+    .loading-tank { height: clamp(46px, min(15vh, 20vw), 120px); width: auto; flex: 0 1 auto; min-width: 0; pointer-events: none; user-select: none; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.6)); }
+    .loading-overlay.fatal .loading-brand { display: none; }
+    /* the small Telegram link: bottom-left, only on the loading screen and in the menu (cornerLink.ts) */
+    .tg-link {
+      position: fixed;
+      left: max(12px, env(safe-area-inset-left));
+      bottom: max(10px, env(safe-area-inset-bottom));
+      z-index: 200;
+      display: none;
+      align-items: center;
+      gap: 5px;
+      font: 600 0.7rem/1 var(--font-body, system-ui, sans-serif);
+      letter-spacing: 0.04em;
+      color: rgba(226, 232, 240, 0.55);
+      text-decoration: none;
+      padding: 6px 8px;
+      border-radius: 4px;
+    }
+    .tg-link.on { display: inline-flex; }
+    .tg-link:hover, .tg-link:focus-visible { color: #ffd45a; text-decoration: underline; }
+    .loading-overlay.fading { opacity: 0; pointer-events: none; transition: opacity 0.5s ease; }
+    /* DOS-style story: Press Start 2P has a good Cyrillic; every character is laid out from the start (hidden), so nothing re-wraps or jumps while typing */
+    .loading-story {
+      width: min(90vw, 36rem);
+      margin-bottom: clamp(14px, 3.5vh, 26px);
+      font-family: var(--font-px);
+      font-size: clamp(0.5rem, 1.9vw + 0.18rem, 0.8rem);
+      line-height: 2.1;
+      letter-spacing: 0;
+      color: #cfc8b8;
+      text-align: left;
+      text-shadow: 0 0 6px rgba(255, 190, 90, 0.18);
+      overflow-wrap: break-word;
+    }
+    .loading-story .story-line { min-height: 2.1em; }
+    .loading-story .ch { visibility: hidden; }
+    .loading-story .ch.on { visibility: visible; }
+    .loading-story .story-line.last { color: #f4ecd8; text-shadow: 0 0 8px rgba(255, 210, 120, 0.3); }
+    .loading-story .ch.hot { color: #ffcf4a; text-shadow: 0 0 9px rgba(255, 150, 0, 0.6); }
+    .story-caret { display: inline-block; width: 0; height: 1em; vertical-align: -0.12em; position: relative; }
+    .story-caret::after { content: "\2588"; position: absolute; left: 0.08em; top: 0; line-height: 1; color: #f4ecd8; animation: story-blink 1s steps(1) infinite; }
+    .loading-story.steady .story-caret::after { animation: none; }
+    @keyframes story-blink { 50% { opacity: 0; } }
+    .loading-meter { width: min(90vw, 36rem); }
+    .loading-meter .loading-text { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 0; margin-bottom: 8px; text-transform: uppercase; font-size: clamp(0.62rem, 1.8vw, 0.78rem); color: #e2e8f0; }
+    .loading-meter .loading-text b { font-family: var(--font-head); font-size: 1.05rem; color: #ffd400; letter-spacing: 0.06em; }
+    .loading-bar { height: 14px; border: 2px solid #3c4451; border-radius: 3px; background: #0f1215; padding: 2px; box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.7); }
+    .loading-bar i { display: block; height: 100%; width: 0; background: repeating-linear-gradient(90deg, #ffd400 0 9px, #e0861a 9px 11px); box-shadow: 0 0 8px rgba(255, 150, 0, 0.55); }
+    .loading-overlay.fatal .loading-story, .loading-overlay.fatal .loading-bar, .loading-overlay.fatal .loading-logo { display: none; }
+    @media (max-height: 520px) {
+      .loading-brand { margin: -4px 0 4px; }
+      .loading-brand .loading-logo { transform: perspective(520px) rotateX(14deg) skewX(-8deg) scale(0.7); }
+      .loading-tank { height: 52px; }
+      .loading-story { line-height: 1.75; margin-bottom: 8px; }
+      .loading-story .story-line { min-height: 1.75em; }
+      .loading-bar { height: 10px; }
+    }
+    @media (prefers-reduced-motion: reduce) { .loading-overlay.fading { transition: none; } }
+
+    /* Fonts shipped with the game (SIL Open Font License 1.1, unmodified, licences next to the files in public/fonts) */
+    @font-face {
+      font-family: "Russo One";
+      src: url("./fonts/RussoOne-Regular.ttf") format("truetype");
+      font-weight: 400 900;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: "Press Start 2P";
+      src: url("./fonts/PressStart2P-Regular.ttf") format("truetype");
+      font-display: swap;
+    }
+
+    /* */
+    :root {
+      --font-head: "Russo One", "Arial Black", "Segoe UI Black", Impact, system-ui, sans-serif;
+      --font-px: "Press Start 2P", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --steel-hi: #3a404b;
+      --steel-lo: #20242b;
+      --steel-ink: #0b0d10;
+      --hazard: #f6c344;
+      --khaki: #c9c19a;
+      --rivet: radial-gradient(circle, #9aa1ab 0 1.4px, #2a2e35 2px, transparent 2.6px);
+    }
+    .legacy-hidden { display: none !important; }
+
+    /* ---- panels: dark steel, rivets in the corners, a hazard stripe on top, a small "drop" when they appear ---- */
+    .title-menu-card.menu-v2,
+    .game-state-modal,
+    .panel-v2 {
+      position: relative;
+      background:
+        var(--rivet) 7px 11px / 8px 8px no-repeat,
+        var(--rivet) calc(100% - 7px) 11px / 8px 8px no-repeat,
+        var(--rivet) 7px calc(100% - 7px) / 8px 8px no-repeat,
+        var(--rivet) calc(100% - 7px) calc(100% - 7px) / 8px 8px no-repeat,
+        linear-gradient(180deg, #2a2f37 0%, #1a1d23 100%);
+      border: 2px solid var(--steel-ink);
+      border-top: 2px solid var(--steel-ink);
+      border-radius: 10px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 0 0 1px #3b414c, 0 18px 40px rgba(0, 0, 0, 0.72);
+      backdrop-filter: none;
+      overflow: hidden;
+    }
+    .title-menu-card.menu-v2::before,
+    .game-state-modal::before,
+    .panel-v2::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 6px;
+      background: repeating-linear-gradient(-45deg, var(--hazard) 0 9px, #15171b 9px 18px);
+      opacity: 0.9;
+    }
+    .game-state-modal.victory-card::before { background: repeating-linear-gradient(-45deg, #4ade80 0 9px, #15171b 9px 18px); }
+    .game-state-modal.defeat-card::before { background: repeating-linear-gradient(-45deg, #ef4444 0 9px, #15171b 9px 18px); }
+    .game-state-modal.ready-banner::before { display: none; }
+    @keyframes plate-drop {
+      0% { transform: translateY(-14px) scale(0.97); opacity: 0; }
+      70% { transform: translateY(2px) scale(1); opacity: 1; }
+      100% { transform: none; }
+    }
+    .title-menu-card.menu-v2,
+    .game-state-modal,
+    .panel-v2 { animation: plate-drop 0.26s ease-out; }
+    .mixer-header {
+      font-family: var(--font-head);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 6px 0 6px;
+      gap: 8px;
+    }
+    .mixer-header > span:first-child { flex: 1; }
+    .mixer-status { font-family: var(--font-px); font-size: 0.5rem; color: #8b93a1; letter-spacing: 0; }
+
+    /* ---- buttons: pressed metal plates with a sheen on hover ---- */
+    .btn-primary-gold,
+    .btn-secondary-dark,
+    .btn-coop-jade,
+    .btn-continue-amber {
+      position: relative;
+      overflow: hidden;
+      font-family: var(--font-head);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      border: 2px solid var(--steel-ink);
+      border-radius: 7px;
+      cursor: pointer;
+      transition: transform 0.07s ease, box-shadow 0.07s ease, filter 0.15s ease, color 0.15s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn-primary-gold {
+      color: #1b1405;
+      font-size: 1rem;
+      padding: 12px 18px;
+      background: linear-gradient(180deg, #ffe48a 0%, #f6c344 46%, #d8960f 100%);
+      box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.6), inset 0 -3px 0 rgba(120, 70, 0, 0.55), 0 3px 0 var(--steel-ink), 0 7px 16px rgba(0, 0, 0, 0.45);
+    }
+    .btn-primary-gold::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 4px;
+      background: repeating-linear-gradient(-45deg, rgba(27, 20, 5, 0.55) 0 6px, transparent 6px 12px);
+      background-size: 17px 4px;
+      animation: hazard-crawl 1.1s linear infinite;
+    }
+    @keyframes hazard-crawl { to { background-position: 17px 0; } }
+    .btn-coop-jade {
+      color: #f4f0d6;
+      font-size: 0.95rem;
+      padding: 11px 18px;
+      background: linear-gradient(180deg, #7f9a45 0%, #566f2a 50%, #3b4f1b 100%);
+      box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.28), inset 0 -3px 0 rgba(20, 30, 5, 0.6), 0 3px 0 var(--steel-ink), 0 7px 16px rgba(0, 0, 0, 0.45);
+    }
+    .btn-continue-amber {
+      color: #1e0d02;
+      font-size: 0.82rem;
+      padding: 10px 14px;
+      background: linear-gradient(180deg, #ffb45c 0%, #f28a1e 50%, #c45f0b 100%);
+      box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.45), inset 0 -3px 0 rgba(90, 35, 0, 0.55), 0 3px 0 var(--steel-ink), 0 7px 16px rgba(0, 0, 0, 0.45);
+    }
+    .btn-secondary-dark {
+      color: #e6e9ee;
+      font-size: 0.78rem;
+      padding: 9px 14px;
+      background: linear-gradient(180deg, var(--steel-hi) 0%, var(--steel-lo) 100%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 -2px 0 rgba(0, 0, 0, 0.45), 0 3px 0 var(--steel-ink), 0 6px 12px rgba(0, 0, 0, 0.4);
+    }
+    .btn-secondary-dark:hover { color: #ffe48a; background: linear-gradient(180deg, #444b57 0%, #262a32 100%); }
+    .btn-primary-gold:hover,
+    .btn-coop-jade:hover,
+    .btn-continue-amber:hover { filter: brightness(1.08); }
+    .btn-primary-gold::after,
+    .btn-secondary-dark::after,
+    .btn-coop-jade::after,
+    .btn-continue-amber::after,
+    .tool-btn::after {
+      content: '';
+      position: absolute;
+      top: -20%;
+      left: -70%;
+      width: 45%;
+      height: 140%;
+      background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+      transform: skewX(-20deg);
+      pointer-events: none;
+    }
+    @media (hover: hover) {
+      .btn-primary-gold:hover::after,
+      .btn-secondary-dark:hover::after,
+      .btn-coop-jade:hover::after,
+      .btn-continue-amber:hover::after,
+      .tool-btn:hover::after { animation: plate-sheen 0.65s ease-out; }
+    }
+    @keyframes plate-sheen { to { left: 130%; } }
+    .btn-primary-gold:active,
+    .btn-secondary-dark:active,
+    .btn-coop-jade:active,
+    .btn-continue-amber:active,
+    .tool-btn:active,
+    .stage-step-btn:active {
+      transform: translateY(3px);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 0 var(--steel-ink);
+    }
+    .confirm-pending { animation: confirm-blink 0.5s steps(2) infinite; }
+    @keyframes confirm-blink { 50% { filter: brightness(1.35); } }
+
+    /* square icon plates (pause, sound, camera, settings, …) */
+    .tool-btn,
+    .stage-step-btn,
+    .panel-close {
+      position: relative;
+      overflow: hidden;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      color: #e6e9ee;
+      background: linear-gradient(180deg, var(--steel-hi) 0%, var(--steel-lo) 100%);
+      border: 2px solid var(--steel-ink);
+      border-radius: 8px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 -2px 0 rgba(0, 0, 0, 0.45), 0 3px 0 var(--steel-ink);
+      cursor: pointer;
+      transition: transform 0.07s ease, color 0.15s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .tool-btn:hover,
+    .stage-step-btn:hover,
+    .panel-close:hover { color: #ffe48a; }
+    .tool-btn.active { color: #ffe48a; box-shadow: inset 0 0 10px rgba(246, 195, 68, 0.35), 0 3px 0 var(--steel-ink); }
+    .px-svg { width: 22px; height: 22px; image-rendering: pixelated; }
+    .stage-step-btn { width: 38px; height: 38px; }
+    .stage-step-btn .px-svg { width: 18px; height: 18px; }
+    .panel-close { width: 30px; height: 30px; border-radius: 6px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14); }
+    .panel-close .px-svg { width: 14px; height: 14px; }
+    .lang-btn { font-family: var(--font-px); font-size: 0.62rem; }
+    .ui-spark {
+      position: fixed;
+      width: 4px;
+      height: 4px;
+      margin: -2px 0 0 -2px;
+      pointer-events: none;
+      z-index: 9999;
+      animation: ui-spark 0.45s ease-out forwards;
+    }
+    @keyframes ui-spark { to { transform: translate(var(--dx), var(--dy)); opacity: 0; } }
+
+    /* ---- title menu ---- */
+    .title-menu-card.menu-v2 { max-width: 380px; padding: 22px 22px 18px; }
+    .game-logo {
+      position: relative;
+      margin: 6px 0 18px;
+      transform: perspective(520px) rotateX(14deg) skewX(-8deg);
+      user-select: none;
+    }
+    .logo-top {
+      font-family: var(--font-head);
+      font-weight: 900;
+      font-style: italic;
+      font-size: clamp(2.3rem, 8vw, 3.3rem);
+      line-height: 1;
+      letter-spacing: 0.04em;
+      background: linear-gradient(180deg, #ffffff 0%, #e2e8ef 24%, #9aa5b3 48%, #3c4451 51%, #8d98a6 66%, #e9eef4 86%, #ffffff 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      -webkit-text-stroke: 1px rgba(14, 16, 20, 0.85);
+      filter: drop-shadow(0 3px 0 #0b0d10) drop-shadow(0 0 10px rgba(160, 190, 230, 0.25));
+    }
+    .logo-bottom span {
+      display: inline-block;
+      margin-top: 4px;
+      font-family: var(--font-head);
+      font-style: italic;
+      font-weight: 900;
+      text-transform: uppercase;
+      font-size: clamp(1rem, 3.6vw, 1.4rem);
+      letter-spacing: 0.14em;
+      background: linear-gradient(180deg, #fff6b0 0%, #ffd400 32%, #ff8a00 66%, #e0261a 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      filter: drop-shadow(0 0 7px rgba(255, 120, 0, 0.6));
+    }
+    .logo-trails i {
+      position: absolute;
+      left: 2%;
+      height: 3px;
+      border-radius: 2px;
+      background: linear-gradient(90deg, transparent 0%, #e0261a 25%, #ff8a00 60%, #ffd400 90%, #fff6b0 100%);
+      box-shadow: 0 0 8px rgba(255, 110, 0, 0.75);
+      animation: trail-flicker 0.16s steps(2) infinite alternate;
+    }
+    .logo-trails i:nth-child(1) { bottom: -9px; width: 62%; }
+    .logo-trails i:nth-child(2) { bottom: -16px; width: 50%; animation-delay: 0.08s; }
+    @keyframes trail-flicker { to { opacity: 0.72; transform: scaleX(0.97); transform-origin: left; } }
+    .menu-v2 .title-stage-picker-row {
+      background: #0f1115;
+      border: 2px solid var(--steel-ink);
+      box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.7), 0 1px 0 rgba(255, 255, 255, 0.06);
+      padding: 6px 8px;
+      margin-bottom: 14px;
+    }
+    .menu-v2 .stage-picker-title { font-family: var(--font-px); font-size: 0.72rem; color: var(--hazard); letter-spacing: 0.02em; }
+    .menu-v2 .stage-picker-meta { font-family: var(--font-head); font-size: 0.74rem; color: var(--khaki); letter-spacing: 0.06em; text-transform: uppercase; }
+    .menu-v2 .title-menu-actions { gap: 10px; }
+    .menu-icon-row { display: flex; justify-content: center; gap: 10px; margin-top: 16px; }
+
+    /* ---- battle strip: icons and numbers only, one pause button ---- */
+    .hud-top-row { align-items: flex-start; }
+    .game-telemetry-strip.hud-v2 {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 10px;
+      width: auto;
+      flex-wrap: nowrap;
+      background: rgba(14, 16, 20, 0.84);
+      border: 2px solid var(--steel-ink);
+      border-radius: 8px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 0 0 1px #343a45, 0 6px 16px rgba(0, 0, 0, 0.5);
+      backdrop-filter: none;
+    }
+    .game-telemetry-strip.hud-v2.hud-idle { display: none !important; }
+    .hud-group { display: flex; align-items: center; gap: 10px; }
+    .hud-group + .hud-group { border-left: 1px solid rgba(255, 255, 255, 0.12); padding-left: 10px; }
+    .hud-group.hidden { display: none !important; }
+    .p-tag { display: none; font-family: var(--font-px); font-size: 0.5rem; color: #15171b; background: var(--hazard); padding: 3px 4px; border-radius: 3px; }
+    .hud-group.p2 .p-tag { background: #4ade80; }
+    .hud-v2.is-2p .p-tag { display: inline-block; }
+    .hud-chip { display: inline-flex; align-items: center; gap: 5px; }
+    .hud-v2 .hud-metric-val { font-family: var(--font-px); font-size: 0.72rem; letter-spacing: 0; }
+    .hud-chip-label { font-family: var(--font-head); font-size: 0.62rem; color: #9aa3b2; letter-spacing: 0.08em; }
+    .px-ico { display: inline-flex; width: 14px; height: 14px; }
+    .px-ico .px-svg { width: 14px; height: 14px; }
+    .px-ico[data-icon="heart"] { color: #ef4444; }
+    .px-ico[data-icon="tank"] { color: #cbd5e1; }
+    .hud-actions-group { display: flex; gap: 6px; pointer-events: auto; }
+
+    /* ---- state cards ---- */
+    .game-state-modal .game-modal-title { font-family: var(--font-head); letter-spacing: 0.08em; }
+    .game-state-modal.ready-banner .game-modal-title { font-size: 1.3rem; margin: 0; }
+    .modal-tools {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .modal-tools.hidden { display: none !important; }
+    .recap-line strong,
+    .recap-line.score strong { font-family: var(--font-px); font-size: 0.72rem; }
+
+    /* ---- settings / camera panels ---- */
+    .audio-mixer-popover.panel-v2,
+    .camera-settings-popover.panel-v2 {
+      position: absolute;
+      padding: 10px 14px 14px;
+      gap: 10px;
+      width: 290px;
+      max-height: calc(100dvh - 76px);
+      overflow-y: auto;
+    }
+    .mixer-check-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: #cbd5e1; cursor: pointer; }
+    .lang-row { flex-direction: row; justify-content: space-between; align-items: center; color: #cbd5e1; }
+    .lang-switch { display: flex; gap: 4px; }
+    .lang-opt {
+      font-family: var(--font-px);
+      font-size: 0.56rem;
+      padding: 7px 9px;
+      color: #cbd5e1;
+      background: linear-gradient(180deg, var(--steel-hi) 0%, var(--steel-lo) 100%);
+      border: 2px solid var(--steel-ink);
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .lang-opt.active { color: #1b1405; background: linear-gradient(180deg, #ffe48a 0%, #f6c344 50%, #d8960f 100%); }
+    .mixer-more summary {
+      list-style: none;
+      cursor: pointer;
+      font-family: var(--font-head);
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #9aa3b2;
+      padding: 6px 0;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .mixer-more summary::-webkit-details-marker { display: none; }
+    .mixer-more summary::before { content: '▸ '; color: var(--hazard); }
+    .mixer-more[open] summary::before { content: '▾ '; }
+    .mixer-more-body { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
+    .mixer-text-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      width: 100%;
+      padding: 10px 14px;
+      font-family: inherit;
+      font-size: 0.84rem;
+      font-weight: 600;
+      color: #cfd6e4;
+      background: rgba(30, 35, 45, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .mixer-text-btn:hover {
+      background: rgba(45, 52, 68, 0.9);
+      color: #ffe48a;
+      border-color: rgba(255, 228, 138, 0.4);
+    }
+    .howto-panel.panel-v2 { padding: 12px 18px 16px; max-width: 460px; }
+    .howto-panel .btn-primary-gold { width: 100%; margin-top: 4px; }
+    .howto-section code { font-family: var(--font-px); font-size: 0.56rem; color: var(--hazard); background: #0f1115; padding: 2px 4px; border-radius: 3px; }
+
+    /* ---- phones held sideways: stats as a column top-left, the pause button top-right ---- */
+    @media (max-height: 520px) and (orientation: landscape) {
+      .game-telemetry-strip.hud-v2 { flex-direction: column; align-items: stretch; gap: 4px; padding: 5px 7px; }
+      .hud-group { gap: 8px; }
+      .hud-group + .hud-group { border-left: 0; padding-left: 0; border-top: 1px solid rgba(255, 255, 255, 0.12); padding-top: 4px; }
+      .hud-v2 .hud-metric-val { font-size: 0.52rem; }
+      .hud-chip-label { font-size: 0.56rem; }
+      .px-ico, .px-ico .px-svg { width: 12px; height: 12px; }
+      .hud-actions-group { position: absolute; top: max(6px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); }
+      .tool-btn { width: 40px; height: 40px; }
+      .title-menu-card.menu-v2 { padding: 10px 16px 8px; max-height: calc(var(--vvh, 100dvh) - 12px); overflow-y: auto; }
+      .game-logo { margin: 0 0 6px; }
+      .logo-top { font-size: 1.8rem; }
+      .menu-icon-row { margin-top: 6px; }
+      .menu-v2 .title-menu-actions { gap: 6px; }
+      .btn-primary-gold, .btn-coop-jade { padding: 8px 12px; }
+      .audio-mixer-popover.panel-v2,
+      .camera-settings-popover.panel-v2,
+      .howto-panel.panel-v2 { right: 56px; top: max(6px, env(safe-area-inset-top)); max-height: calc(var(--vvh, 100dvh) - 12px); overflow-y: auto; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .title-menu-card.menu-v2, .game-state-modal, .panel-v2, .btn-primary-gold::before, .logo-trails i, .confirm-pending { animation: none !important; }
+    }
+
+    /* ---- room inspection (v10 test build) ---- */
+    .room-inspect-ui {
+      position: absolute;
+      inset: 0;
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      pointer-events: none;
+      padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    }
+    .room-inspect-ui.hidden { display: none !important; }
+    .ri-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .ri-title { font-family: var(--font-head); font-size: 0.8rem; letter-spacing: 0.1em; color: #ffe48a; background: rgba(20, 23, 29, 0.78); padding: 6px 10px; border-radius: 4px; pointer-events: none; }
+    .ri-top .btn-primary-gold { pointer-events: auto; padding: 9px 14px; font-size: 0.8rem; }
+    .ri-bottom { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+    .ri-hint { font-size: 0.7rem; color: #cfd6e4; background: rgba(20, 23, 29, 0.7); padding: 4px 9px; border-radius: 4px; text-align: center; }
+    .ri-chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; pointer-events: auto; max-width: 100%; }
+    .ri-chip { pointer-events: auto; background: rgba(34, 39, 50, 0.92); color: #e6e9ee; border: 1px solid var(--btn-border); border-radius: 16px; padding: 8px 12px; font-size: 0.74rem; font-weight: 600; cursor: pointer; }
+    .ri-chip.active { background: #ffd24a; color: #14171d; border-color: #fff2a8; }
+    .ri-chip:disabled { opacity: 0.55; }
+    .ri-loading { align-self: center; font-size: 0.8rem; color: #ffe48a; background: rgba(20, 23, 29, 0.85); padding: 6px 12px; border-radius: 4px; }
+    .ri-loading.hidden { display: none; }
+    @media (max-width: 520px) { .ri-chips { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; padding-bottom: 2px; } .ri-chip { flex: 0 0 auto; } }
+
+    /* ---- 3D Chase Camera & Minimap Styles ---- */
+    .hud-mode-btn {
+      font-family: var(--font-px), monospace;
+      font-size: 0.76rem;
+      font-weight: 700;
+      color: #ffd24a;
+      letter-spacing: 0.04em;
+    }
+    .hud-mode-btn.active {
+      color: #14171d;
+      background: linear-gradient(180deg, #ffe066 0%, #f5c542 100%);
+      box-shadow: 0 0 10px rgba(246, 195, 68, 0.6), inset 0 1px 0 #fff;
+      border-color: #ffe680;
+    }
+    .btn-micro-toggle {
+      font-family: var(--font-px), monospace;
+      font-size: 0.64rem;
+      padding: 3px 8px;
+      border-radius: 4px;
+      border: 1px solid var(--btn-border);
+      background: #242933;
+      color: #ffd24a;
+      cursor: pointer;
+    }
+    .btn-micro-toggle.active {
+      background: #ffd24a;
+      color: #14171d;
+      border-color: #ffe680;
+    }
+    .quality-pills-row,
+    .variant-pills-row {
+      display: flex;
+      gap: 5px;
+      margin-top: 4px;
+    }
+    .pill-btn {
+      flex: 1;
+      padding: 4px 6px;
+      font-size: 0.64rem;
+      font-family: var(--font-head), sans-serif;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: #1c2028;
+      color: #b0b8c4;
+      cursor: pointer;
+      transition: background 0.1s, color 0.1s, border-color 0.1s;
+    }
+    .pill-btn:hover {
+      color: #ffffff;
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+    .pill-btn.active {
+      background: #f5c542;
+      color: #14171d;
+      font-weight: 700;
+      border-color: #ffe680;
+    }
+    /* Hide debug room navigation dock and telemetry badge during active gameplay and 3D mode */
+    body.in-3d .controls-dock,
+    body.in-3d .telemetry-badge,
+    body.in-gameplay .controls-dock,
+    body.in-gameplay .telemetry-badge {
+      display: none !important;
+    }
+    .hud-actions-group .hud-mode-btn {
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      min-width: 38px;
+    }
+    .hud-actions-group .hud-mode-btn.active {
+      background: #f5c542;
+      color: #14171d;
+      border-color: #ffe680;
+    }
+    /* Floating Performance Telemetry Badge (Samsung Galaxy A55 & Mobile Testing) */
+    .perf-fps-badge {
+      position: absolute;
+      top: max(8px, env(safe-area-inset-top));
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 60;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(14, 17, 23, 0.92);
+      border: 1.5px solid rgba(255, 207, 90, 0.45);
+      border-radius: 6px;
+      padding: 3px 9px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: #94a3b8;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(8px);
+      cursor: pointer;
+      user-select: none;
+      pointer-events: auto;
+      white-space: nowrap;
+      transition: opacity 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+    }
+    .perf-fps-badge:hover {
+      border-color: rgba(255, 207, 90, 0.8);
+    }
+    .perf-fps-badge .perf-fps-val {
+      color: #4ade80;
+      font-family: var(--font-px), monospace;
+      font-size: 0.72rem;
+    }
+    .perf-fps-badge .perf-fps-val.warning {
+      color: #fbbf24;
+    }
+    .perf-fps-badge .perf-fps-val.danger {
+      color: #f87171;
+    }
+    .perf-fps-badge .perf-ft-val {
+      color: #38bdf8;
+      font-family: var(--font-px), monospace;
+      font-size: 0.72rem;
+    }
+    .perf-fps-badge .perf-unit {
+      font-size: 0.58rem;
+      color: #64748b;
+      font-weight: 600;
+    }
+    .perf-fps-badge .perf-sep {
+      color: rgba(255, 255, 255, 0.25);
+    }
+    .perf-fps-badge.compact .perf-sep,
+    .perf-fps-badge.compact .perf-ft-val,
+    .perf-fps-badge.compact .perf-unit:last-child {
+      display: none !important;
+    }
+    .perf-fps-badge.hidden {
+      display: none !important;
+    }
+    @media (max-width: 600px) and (orientation: portrait) {
+      .perf-fps-badge {
+        top: max(46px, calc(env(safe-area-inset-top) + 40px));
+      }
+    }
+    @media (orientation: landscape) and (max-height: 520px) {
+      .perf-fps-badge {
+        top: max(6px, env(safe-area-inset-top));
+      }
+    }
+
+    /* Tactical scheme & camera toast notification */
+    .hud-scheme-toast {
+      position: absolute;
+      top: max(54px, calc(env(safe-area-inset-top) + 48px));
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 55;
+      background: rgba(18, 22, 30, 0.94);
+      border: 1px solid rgba(255, 207, 90, 0.6);
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-family: var(--font-ui), sans-serif;
+      font-size: 0.74rem;
+      font-weight: 700;
+      color: #f8fafc;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      pointer-events: none;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      white-space: nowrap;
+    }
+    .hud-scheme-toast.hidden {
+      opacity: 0;
+      transform: translateX(-50%) translateY(-8px);
+      pointer-events: none;
+    }
+    @media (max-width: 600px) and (orientation: portrait) {
+      .hud-scheme-toast {
+        top: max(80px, calc(env(safe-area-inset-top) + 74px));
+        font-size: 0.68rem;
+        padding: 5px 10px;
+      }
+    }
+    .gameplay-minimap {
+      position: absolute;
+      top: max(56px, calc(env(safe-area-inset-top) + 50px));
+      left: max(12px, env(safe-area-inset-left));
+      right: auto;
+      z-index: 25;
+      background: rgba(18, 14, 11, 0.88);
+      border: 1.5px solid rgba(245, 197, 66, 0.45);
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(8px);
+      padding: 5px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      user-select: none;
+      touch-action: manipulation;
+      transition: width 0.2s cubic-bezier(0.2, 0, 0, 1), height 0.2s cubic-bezier(0.2, 0, 0, 1), opacity 0.2s ease;
+    }
+    .gameplay-minimap.hidden {
+      display: none !important;
+    }
+    .gameplay-minimap.compact {
+      width: 114px;
+      height: 136px;
+    }
+    .gameplay-minimap.compact #minimap-canvas {
+      width: 104px;
+      height: 104px;
+    }
+    .gameplay-minimap.expanded {
+      width: 220px;
+      height: 242px;
+    }
+    .gameplay-minimap.expanded #minimap-canvas {
+      width: 210px;
+      height: 210px;
+    }
+    .minimap-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2px;
+    }
+    .minimap-label {
+      font-family: var(--font-px), monospace;
+      font-size: 0.58rem;
+      letter-spacing: 0.06em;
+      color: #ffd24a;
+    }
+    .minimap-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .minimap-exit-btn {
+      background: linear-gradient(180deg, #ffe066 0%, #f5c542 100%);
+      color: #14171d;
+      border: 1px solid #ffe680;
+      border-radius: 4px;
+      font-family: var(--font-px), monospace;
+      font-size: 0.58rem;
+      font-weight: 800;
+      padding: 2px 6px;
+      cursor: pointer;
+      line-height: 1.1;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    .minimap-exit-btn:active,
+    .minimap-exit-btn:hover {
+      background: #ffd24a;
+      border-color: #fff;
+    }
+    .minimap-toggle-btn {
+      background: transparent;
+      border: none;
+      color: #cfd6e4;
+      font-size: 0.72rem;
+      cursor: pointer;
+      padding: 0 2px;
+      line-height: 1;
+    }
+    .minimap-toggle-btn:hover {
+      color: #ffe48a;
+    }
+    #minimap-canvas {
+      border-radius: 4px;
+      background: #140f0c;
+      display: block;
+      cursor: pointer;
+      image-rendering: pixelated;
+    }
+    @media (max-width: 540px) {
+      .gameplay-minimap {
+        top: max(48px, calc(env(safe-area-inset-top) + 44px));
+        left: max(6px, env(safe-area-inset-left));
+        right: auto;
+      }
+      .gameplay-minimap.compact {
+        width: 98px;
+        height: 120px;
+      }
+      .gameplay-minimap.compact #minimap-canvas {
+        width: 88px;
+        height: 88px;
+      }
+      .gameplay-minimap.expanded {
+        width: 188px;
+        height: 210px;
+      }
+      .gameplay-minimap.expanded #minimap-canvas {
+        width: 178px;
+        height: 178px;
+      }
+    }
+    @media (orientation: landscape) and (max-height: 480px) {
+      .gameplay-minimap {
+        top: max(40px, calc(env(safe-area-inset-top) + 38px));
+        left: max(8px, env(safe-area-inset-left));
+        right: auto;
+      }
+      .gameplay-minimap.compact {
+        width: 88px;
+        height: 106px;
+      }
+      .gameplay-minimap.compact #minimap-canvas {
+        width: 78px;
+        height: 78px;
+      }
+      .gameplay-minimap.expanded {
+        width: 154px;
+        height: 172px;
+      }
+      .gameplay-minimap.expanded #minimap-canvas {
+        width: 144px;
+        height: 144px;
+      }
+    }
+
+    @media (orientation: landscape), (max-height: 520px) {
+      .btn-touch-fire {
+        width: 64px;
+        height: 64px;
+        margin-bottom: 4px;
+      }
+      .touch-dpad {
+        width: 110px;
+        height: 110px;
+      }
+      .dpad-btn {
+        width: 36px;
+        height: 36px;
+      }
+      .dpad-up { top: 0; left: 36px; }
+      .dpad-down { bottom: 0; left: 36px; }
+      .dpad-left { top: 36px; left: 0; }
+      .dpad-right { top: 36px; right: 0; }
+    }
+
+    @media (orientation: portrait) and (max-aspect-ratio: 13/14) {
+      .touch-controls-layer {
+        padding: 0 16px max(24px, env(safe-area-inset-bottom, 16px)) 16px !important;
+        margin-bottom: 12px !important;
+      }
+      .touch-dpad {
+        width: 136px !important;
+        height: 136px !important;
+      }
+      .dpad-btn {
+        width: 45px !important;
+        height: 45px !important;
+        font-size: 1.05rem !important;
+      }
+      .dpad-up { top: 0 !important; left: 45px !important; }
+      .dpad-down { bottom: 0 !important; left: 45px !important; }
+      .dpad-left { top: 45px !important; left: 0 !important; }
+      .dpad-right { top: 45px !important; right: 0 !important; }
+      .btn-touch-fire {
+        width: 88px !important;
+        height: 88px !important;
+        margin-bottom: 22px !important;
+        font-size: 0.88rem !important;
+      }
+    }
+  </style>
+  <script type="module" crossorigin src="/tanchiki-95/assets/index-D2ZGSjV3.js"></script>
+</head>
+<body>
+  <main>
+    <div id="loading" class="loading-overlay">
+      <div class="loading-brand">
+        <img class="loading-tank" src="./assets/logo_tank.webp" alt="" aria-hidden="true" draggable="false">
+        <div class="game-logo loading-logo">
+          <div class="logo-top" data-i18n="logoTop">ТАНЧИКИ</div>
+          <div class="logo-bottom"><span data-i18n="logoBottom">назад в 95</span></div>
+        </div>
+      </div>
+      <div id="loading-story" class="loading-story" aria-hidden="true"></div>
+      <div class="loading-meter">
+        <div class="loading-text"><span data-i18n="loadingTitle">Разблокировка воспоминания…</span> <b id="loading-pct">0%</b></div>
+        <div class="loading-bar"><i id="loading-bar-fill"></i></div>
+      </div>
+      <div class="spinner" style="display:none"></div>
+    </div>
+
+    <a id="tg-link" class="tg-link" href="https://t.me/Andrey_Os" target="_blank" rel="noopener noreferrer" aria-label="Telegram @Andrey_Os">
+      <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M21.9 3.6 2.7 11c-1.3.5-1.3 1.3-.2 1.6l4.9 1.5 1.9 5.9c.2.6.1.9.8.9.5 0 .8-.2 1.1-.5l2.4-2.3 4.9 3.6c.9.5 1.5.2 1.7-.8L23.9 5c.3-1.3-.5-1.9-2-1.4zM8.9 13.6l9.7-6.1c.5-.3.9-.1.5.2l-7.9 7.1-.3 3.4z"/></svg>
+      <span>@Andrey_Os</span>
+    </a>
+
+    <!-- Live PlayCanvas WebGL Canvas (Pre-warmed at FULL_BOARD before intro ends) -->
+    <canvas id="application-canvas"></canvas>
+
+    <!-- Subtle warm optical bridge during 0.65s handoff cross-dissolve -->
+    <div id="handoff-warm-glow" class="handoff-warm-glow" aria-hidden="true"></div>
+
+    <!-- Pre-rendered Blender Cycles 1080p Cinematic Intro Layer -->
+    <section id="intro-stage" class="intro-stage hidden" data-i18n-aria="introAria" aria-label="Заставка: октябрь 1995">
+      <video
+        id="intro-video"
+        class="intro-video"
+        width="1920"
+        height="1080"
+        poster="/tanchiki-95/assets/intro_poster.jpg"
+        preload="auto"
+        muted
+        playsinline
+        aria-hidden="true"
+      >
+        <source src="/tanchiki-95/assets/battle_city_1995_intro.webm" type="video/webm">
+        <source src="/tanchiki-95/assets/battle_city_1995_intro.mp4" type="video/mp4">
+      </video>
+
+      <div class="intro-hud">
+        <div class="intro-top-bar">
+          <div id="intro-shot-caption" class="intro-date-stamp">ОКТЯБРЬ 1995 • РОССИЯ</div>
+          <button id="btn-intro-mute" type="button" class="btn-skip-intro btn-intro-mute hidden" data-i18n-title="introMute" title="Выключить звук заставки" aria-pressed="false">🔊</button>
+        </div>
+        <div class="intro-bottom-bar">
+          <button id="btn-skip-intro" type="button" class="btn-skip-intro" data-i18n-title="skipTitle" title="Пропустить заставку (Esc / Пробел)">
+            <span data-i18n="skip">Пропустить</span>
+            <span class="skip-key-hint" data-i18n="skipKeys">ESC / ПРОБЕЛ</span>
+          </button>
+          <div class="intro-progress-track" aria-hidden="true">
+            <div id="intro-progress-fill" class="intro-progress-fill"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Autoplay-Blocked or Reduced-Motion User Choice Card -->
+      <div id="intro-gate-card" class="intro-gate-card hidden" role="dialog" aria-modal="true" aria-labelledby="intro-gate-title">
+        <div class="intro-gate-panel">
+          <h2 id="intro-gate-title" class="intro-gate-title">Танчики: назад в 95</h2>
+          <p id="intro-gate-desc" class="intro-gate-desc">Октябрь 1995 года. Посмотрите заставку или сразу переходите к полю боя.</p>
+          <div class="intro-gate-actions">
+            <button id="btn-watch-intro" type="button" class="btn-primary-gold" data-i18n="watchIntro">▶ Смотреть заставку</button>
+            <button id="btn-direct-board" type="button" class="btn-secondary-dark" data-i18n="toBoard">К полю боя</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Peripheral Board View & Complete 35-Stage Campaign Gameplay HUD -->
+    <div id="board-ui-overlay" class="ui-overlay ui-hidden">
+      <div id="score-popups-layer" class="score-popups-layer" aria-hidden="true"></div>
+
+      <!-- Telemetry Badge for mobile FPS & frame time testing -->
+      <div id="perf-fps-badge" class="perf-fps-badge hidden" title="Нажмите для смены режима (Полный / Компактный / Скрыть)">
+        <span class="perf-fps-val" id="perf-fps-val">60</span><span class="perf-unit"> FPS</span>
+        <span class="perf-sep">·</span>
+        <span class="perf-ft-val" id="perf-ft-val">16.6</span><span class="perf-unit"> ms</span>
+      </div>
+
+      <!-- Tactical scheme & camera toast notification -->
+      <div id="hud-scheme-toast" class="hud-scheme-toast hidden" aria-live="polite"></div>
+
+      <div class="hud-top-row">
+        <header class="hardware-badge legacy-hidden" aria-hidden="true">
+          <span id="badge-subtitle-text" class="badge-subtitle"></span>
+          <button id="btn-start-stage1" type="button" class="btn-start-stage1" tabindex="-1"></button>
+        </header>
+
+        <section id="game-telemetry-strip" class="game-telemetry-strip hud-v2" data-i18n-aria="hudAria" aria-label="Ход боя">
+          <div class="hud-group p1">
+            <span class="p-tag">1P</span>
+            <span class="hud-chip" data-i18n-title="livesTitle"><i class="px-ico" data-icon="heart"></i><span id="hud-lives" class="hud-metric-val">3</span></span>
+            <span class="hud-chip" data-i18n-title="starsTitle"><span id="hud-powerup-status" class="hud-metric-val gold">0★</span></span>
+            <span class="hud-chip score" data-i18n-title="scoreTitle"><span id="hud-score" class="hud-metric-val gold">00000</span></span>
+            <span id="hud-lives-icons" hidden></span>
+          </div>
+          <div id="hud-p2-group" class="hud-group p2 hud-p2-group hidden">
+            <span class="p-tag">2P</span>
+            <span class="hud-chip" data-i18n-title="livesTitle"><i class="px-ico" data-icon="heart"></i><span id="hud-lives-p2" class="hud-metric-val jade">3</span></span>
+            <span class="hud-chip" data-i18n-title="starsTitle"><span id="hud-star-p2" class="hud-metric-val jade">0★</span></span>
+            <span class="hud-chip score" data-i18n-title="scoreTitle"><span id="hud-score-p2" class="hud-metric-val jade">00000</span></span>
+          </div>
+          <div class="hud-group">
+            <span class="hud-chip" data-i18n-title="enemiesTitle"><i class="px-ico" data-icon="tank"></i><span id="hud-enemies-count" class="hud-metric-val">20</span></span>
+            <span class="hud-chip" data-i18n-title="stageTitle"><span class="hud-chip-label" data-i18n="stage">ЭТАП</span><span id="hud-stage" class="hud-metric-val gold">01</span></span>
+            <span id="hud-enemies-grid" hidden></span>
+            <span id="hud-highscore" hidden>20000</span>
+          </div>
+        </section>
+        <div class="hud-actions-group">
+          <button id="btn-hud-toggle-3d" type="button" class="tool-btn hud-mode-btn" data-i18n-title="cameraToggle3D" data-i18n-aria="cameraToggle3D" title="3D режим (C)" aria-label="3D режим (C)">3D</button>
+          <button id="btn-hud-pause" type="button" class="tool-btn hidden" data-icon="pause" data-i18n-title="pause" data-i18n-aria="pause" title="Пауза (P)" aria-label="Пауза (P)"></button>
+          <button id="btn-hud-top-fullscreen" type="button" class="tool-btn hidden" data-icon="fullscreen" data-i18n-title="fullscreen" data-i18n-aria="fullscreen" title="Во весь экран" aria-label="Во весь экран"></button>
+          <button id="btn-hud-debug" type="button" class="tool-btn dev-only" title="Collision grid (B)">📐</button>
+        </div>
+      </div>
+
+      <!-- Compact Gameplay Camera Popover (Tilt 60°–85°, Safe Zoom, Reset View) -->
+      <aside id="camera-settings-popover" class="camera-settings-popover panel-v2 hidden" data-i18n-aria="cameraAria" aria-label="Камера">
+        <div class="mixer-header">
+          <span data-i18n="cameraHeader">КАМЕРА</span>
+          <span id="camera-clamp-status" class="mixer-status">ПОЛЕ В КАДРЕ ✓</span>
+          <button id="btn-camera-close" type="button" class="panel-close" data-icon="close" data-i18n-aria="close" aria-label="Закрыть"></button>
+        </div>
+        <div class="mixer-row" style="margin-top: 2px; padding-bottom: 6px; border-bottom: 1px solid rgba(255,207,90,0.15);">
+          <div class="mixer-row-top"><span>Вид от 3-го лица</span><button id="btn-cam-popover-3d" type="button" class="btn-micro-toggle">3D [ВЫКЛ]</button></div>
+        </div>
+        <div id="cam-variant-row" class="mixer-row" style="padding-bottom: 6px; border-bottom: 1px solid rgba(255,207,90,0.15);">
+          <div class="mixer-row-top"><span>Масштаб 3D-камеры</span><span id="val-cam-variant">3.0×: Широкий обзор (Утверждён)</span></div>
+          <div class="variant-pills-row">
+            <button type="button" class="pill-btn active" data-variant="scale_3x">3.0× (Широкий)</button>
+            <button type="button" class="pill-btn" data-variant="scale_2x">2.0× (Баланс)</button>
+            <button type="button" class="pill-btn" data-variant="scale_1_5x">1.5× (Ближе)</button>
+          </div>
+        </div>
+        <div id="cam-quality-row" class="mixer-row" style="padding-bottom: 6px; border-bottom: 1px solid rgba(255,207,90,0.15);">
+          <div class="mixer-row-top"><span>Размытие комнаты</span><span id="val-blur-quality">Высокое</span></div>
+          <div class="quality-pills-row">
+            <button type="button" class="pill-btn active" data-quality="high">Высокое</button>
+            <button type="button" class="pill-btn" data-quality="balanced">Баланс</button>
+            <button type="button" class="pill-btn" data-quality="performance">Выкл</button>
+          </div>
+        </div>
+        <div class="mixer-row">
+          <div class="mixer-row-top"><span data-i18n="tilt">Наклон</span><span id="val-cam-tilt">60°</span></div>
+          <input id="slider-cam-tilt" class="mixer-slider" type="range" min="60" max="85" step="1" value="60">
+        </div>
+        <div class="mixer-row">
+          <div class="mixer-row-top"><span data-i18n="zoom">Масштаб</span><span id="val-cam-zoom">130%</span></div>
+          <input id="slider-cam-zoom" class="mixer-slider" type="range" min="84" max="130" step="1" value="130">
+        </div>
+        <label class="mixer-check-row"><span data-i18n="shake">Тряска от взрывов</span><input id="chk-cam-shake" type="checkbox" checked></label>
+        <button id="btn-cam-reset" type="button" class="btn-secondary-dark" data-i18n="cameraReset">↻ Вид по умолчанию</button>
+      </aside>
+
+      <!-- Compact Settings, 8-Bit Audio & Quality Popover -->
+      <aside id="audio-mixer-popover" class="audio-mixer-popover panel-v2 hidden" data-i18n-aria="settingsAria" aria-label="Настройки">
+        <div class="mixer-header">
+          <span data-i18n="settings">Настройки</span>
+          <span id="mixer-status-label" class="mixer-status">ВКЛ</span>
+          <button id="btn-settings-close" type="button" class="panel-close" data-icon="close" data-i18n-aria="close" aria-label="Закрыть"></button>
+        </div>
+        <div class="mixer-row">
+          <div class="mixer-row-top"><span data-i18n="volume">Громкость</span><span id="val-vol-master">85%</span></div>
+          <input id="slider-vol-master" class="mixer-slider" type="range" min="0" max="100" value="85">
+        </div>
+        <div class="mixer-row">
+          <div class="mixer-row-top">
+            <label class="mixer-check"><input id="chk-music-enabled" type="checkbox" checked><span data-i18n="music">Музыка</span></label>
+            <span id="val-vol-music">90%</span>
+          </div>
+          <input id="slider-vol-music" class="mixer-slider" type="range" min="0" max="100" value="90">
+        </div>
+        <div class="mixer-row">
+          <div class="mixer-row-top">
+            <label class="mixer-check"><input id="chk-sfx-enabled" type="checkbox" checked><span data-i18n="effects">Эффекты</span></label>
+            <span id="val-vol-sfx">82%</span>
+          </div>
+          <input id="slider-vol-sfx" class="mixer-slider" type="range" min="0" max="100" value="82">
+        </div>
+        <div class="mixer-row lang-row">
+          <span data-i18n="language">Язык</span>
+          <div class="lang-switch" role="group" data-i18n-aria="language" aria-label="Язык">
+            <button id="btn-lang-ru" type="button" class="lang-opt">RU</button>
+            <button id="btn-lang-en" type="button" class="lang-opt">EN</button>
+          </div>
+        </div>
+        <details class="mixer-more">
+          <summary data-i18n="more">Ещё</summary>
+          <div class="mixer-more-body">
+            <div class="mixer-row">
+              <div class="mixer-row-top"><span data-i18n="soundProfile">Звуки</span></div>
+              <select id="select-foley-mode" class="mixer-select" data-i18n-aria="soundProfile" aria-label="Звуки">
+                <option value="REMAKE" selected data-i18n="profileRemake">Ремейк</option>
+                <option value="CLASSIC" data-i18n="profileClassic">Классический 8-бит</option>
+              </select>
+            </div>
+            <div class="mixer-row">
+              <div class="mixer-row-top"><span data-i18n="quality">Качество эффектов</span></div>
+              <select id="select-fx-quality" class="mixer-select" data-i18n-aria="quality" aria-label="Качество эффектов">
+                <option value="HIGH" selected data-i18n="qualityHigh">Высокое</option>
+                <option value="BALANCED" data-i18n="qualityBalanced">Среднее</option>
+                <option value="LOW" data-i18n="qualityLow">Низкое</option>
+              </select>
+            </div>
+            <div class="mixer-row">
+              <div class="mixer-row-top"><span data-i18n="boardBrightness">Яркость поля</span></div>
+              <select id="select-board-brightness" class="mixer-select" data-i18n-aria="boardBrightness" aria-label="Яркость игрового поля">
+                <option value="c" data-i18n="brightnessStandard">Стандартная</option>
+                <option value="d" selected data-i18n="brightnessEnhanced">Повышенная</option>
+                <option value="a" data-i18n="brightnessMuted">Приглушённая (1995)</option>
+              </select>
+            </div>
+            <label class="mixer-check-row"><span data-i18n="cinematics">Пролёты камеры (старт / финал)</span><input id="chk-cinematics-enabled" type="checkbox" checked></label>
+            <label class="mixer-check-row"><span data-i18n="uiSounds">Звуки интерфейса (меню / кооп)</span><input id="chk-ui-sounds-enabled" type="checkbox" checked></label>
+                        <button id="btn-settings-replay-intro" type="button" class="btn-secondary-dark" data-i18n="watchIntroAgain">🎬 Смотреть заставку</button>
+            <details class="credits-details">
+              <summary data-i18n="credits">Титры и лицензии</summary>
+              <div class="credits-body" lang="en">
+                <p><strong>Sound</strong></p>
+                <ul>
+                  <li>Swing: “playground swings” by Gravity Sound, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>; edited (level, filtering, distance).</li>
+                  <li>Children in the yard: “city playground, Boxhagener Platz, Berlin” by foongaz (Freesound 209901), CC0.</li>
+                  <li>Announcer: LibriVox recording read by Mark Chulsky (public domain).</li>
+                </ul>
+                <p><strong>Software</strong></p>
+                <ul>
+                  <li>PlayCanvas engine, MIT.</li>
+                  <li>Basis Universal texture transcoder, Binomial LLC, Apache-2.0 (packaged with three.js, MIT).</li>
+                  <li>Fonts: Press Start 2P, Russo One (SIL Open Font License).</li>
+                </ul>
+                <p><strong>Textures and models</strong></p>
+                <ul><li>Poly Haven (CC0): wood, parquet, plaster, radiator and other surfaces and props.</li></ul>
+                <p class="credits-note">The 1995 school diary cover is the author’s own, published with the author’s consent.</p>
+              </div>
+            </details>
+          </div>
+        </details>
+      </aside>
+
+      <!-- Developer-Only Pacing & Telemetry Comparison Panel (disabled in production unless ?dev=1) -->
+      <aside id="dev-pacing-panel" class="dev-pacing-panel hidden" aria-label="Developer Pacing Telemetry">
+        <div class="dev-panel-title">
+          <span>DEV PACING AUDIT (1985 NES)</span>
+          <span id="dev-tick">TICK 0</span>
+        </div>
+        <div class="dev-kv"><span>Player Speed:</span><strong id="dev-player-speed">2.81 tiles/s (45 px/s)</strong></div>
+        <div class="dev-kv"><span>Enemy Speed (B/F):</span><strong id="dev-enemy-speed">1.88 / 3.75 tiles/s</strong></div>
+        <div class="dev-kv"><span>Bullet Speed:</span><strong id="dev-bullet-speed">7.50 tiles/s (120 px/s)</strong></div>
+        <div class="dev-kv"><span>Spawn / Fire Rate:</span><strong id="dev-spawn-cadence">186f (3.10s) / 1:32</strong></div>
+        <div class="dev-kv"><span>Tanks Rem / Active:</span><strong id="dev-tanks-rem">20 / 0</strong></div>
+        <div class="dev-kv"><span>Active Bullets / Star:</span><strong id="dev-bullets-active">0 / 0★</strong></div>
+        <div class="dev-kv"><span>Board Bonus / Timers:</span><strong id="dev-powerup-info">NONE</strong></div>
+        <div class="dev-kv"><span>PRNG Seed / Engine:</span><strong id="dev-seed-info">0x19951001</strong></div>
+      </aside>
+
+      <!-- Title / Main Menu Card (Shown in BOARD_IDLE; supports 1P, 2P Co-Op, Continue Checkpoint, Stage Select 01-35, How-To-Play) -->
+      <section id="title-menu-card" class="title-menu-card menu-v2 hidden" role="dialog" data-i18n-aria="menuAria" aria-label="Главное меню">
+        <div class="game-logo">
+          <div class="logo-top" data-i18n="logoTop">ТАНЧИКИ</div>
+          <div class="logo-bottom"><span data-i18n="logoBottom">назад в 95</span></div>
+          <div class="logo-trails" aria-hidden="true"><i></i><i></i></div>
+        </div>
+
+        <div class="title-stage-picker-row">
+          <button id="btn-stage-prev" type="button" class="stage-step-btn" data-icon="prev" data-i18n-title="prevStage" data-i18n-aria="prevStage" aria-label="Предыдущий этап"></button>
+          <div class="stage-picker-info">
+            <span id="menu-stage-label" class="stage-picker-title">ЭТАП 01 / 35</span>
+            <span id="menu-stage-meta" class="stage-picker-meta"></span>
+          </div>
+          <button id="btn-stage-next" type="button" class="stage-step-btn" data-icon="next" data-i18n-title="nextStage" data-i18n-aria="nextStage" aria-label="Следующий этап"></button>
+        </div>
+
+        <div class="title-menu-actions">
+          <button id="btn-menu-continue" type="button" class="btn-continue-amber hidden"></button>
+          <button id="btn-menu-1p" type="button" class="btn-primary-gold">1 ИГРОК</button>
+          <button id="btn-menu-2p" type="button" class="btn-coop-jade">2 ИГРОКА</button>
+        </div>
+
+        <div class="menu-icon-row">
+          <button id="btn-menu-settings" type="button" class="tool-btn" data-icon="settings" data-i18n-title="settings" data-i18n-aria="settings" aria-label="Настройки"></button>
+          <button id="btn-menu-howto" type="button" class="tool-btn" data-icon="help" data-i18n-title="howToPlay" data-i18n-aria="howToPlay" aria-label="Как играть"></button>
+          <button id="btn-menu-watch-intro" type="button" class="tool-btn" data-icon="film" data-i18n-title="intro" data-i18n-aria="intro" aria-label="Заставка"></button>
+          <button id="btn-lang" type="button" class="tool-btn lang-btn" data-i18n-title="language" data-i18n-aria="language" aria-label="Язык">EN</button>
+        </div>
+      </section>
+
+      <!-- How-To-Play & Controls Reference Modal -->
+      <div id="howto-modal" class="howto-modal hidden" role="dialog" aria-modal="true" aria-labelledby="howto-title">
+        <div class="howto-panel panel-v2">
+          <div class="mixer-header">
+            <span id="howto-title" data-i18n="howtoTitle">КАК ИГРАТЬ</span>
+            <button id="btn-howto-close-top" type="button" class="panel-close" data-icon="close" data-i18n-aria="close" aria-label="Закрыть"></button>
+          </div>
+          <div class="howto-section"><h3 data-i18n="howtoGoalH">Цель</h3><p data-i18n="howtoGoal"></p></div>
+          <div class="howto-section"><h3 data-i18n="howtoKeysH">Управление</h3><p data-i18n-html="howtoKeys"></p></div>
+          <div class="howto-section"><h3 data-i18n="howto3DH">3D-режим и раскладки</h3><p data-i18n-html="howto3DDesc"></p></div>
+          <div class="howto-section"><h3 data-i18n="howtoFieldH">Поле и враги</h3><p data-i18n="howtoField"></p></div>
+          <button id="btn-howto-close" type="button" class="btn-primary-gold" data-i18n="gotIt">Понятно</button>
+        </div>
+      </div>
+
+      <!-- Center Gameplay State Banner / Modal (READY, PAUSED, STAGE_CLEAR, SCORE_RECAP, CAMPAIGN_COMPLETE, GAME_OVER) -->
+      <div id="game-state-modal" class="game-state-modal hidden" role="dialog" aria-live="polite">
+        <div id="game-modal-badge" class="game-modal-badge">ТАНЧИКИ • 1995</div>
+        <h2 id="game-modal-title" class="game-modal-title">STAGE 01</h2>
+        <p id="game-modal-desc" class="game-modal-desc">Защитите штаб орла и уничтожьте 20 танков противника.</p>
+        <div id="game-modal-stats" class="game-modal-stats hidden"></div>
+        <div class="game-modal-actions">
+          <button id="btn-modal-primary" type="button" class="btn-primary-gold">▶</button>
+          <button id="btn-modal-secondary" type="button" class="btn-secondary-dark hidden">↻</button>
+          <button id="btn-modal-menu" type="button" class="btn-secondary-dark hidden">☰</button>
+          <button id="btn-modal-inspect" type="button" class="btn-secondary-dark dev-only hidden">📷 Free room camera [DEV]</button>
+        </div>
+        <div id="modal-tools" class="modal-tools hidden">
+          <button id="btn-hud-mute" type="button" class="tool-btn" data-icon="sound" data-i18n-title="sound" data-i18n-aria="sound" aria-label="Звук (M)"></button>
+          <button id="btn-hud-camera" type="button" class="tool-btn" data-icon="camera" data-i18n-title="camera" data-i18n-aria="camera" aria-label="Камера"></button>
+          <button id="btn-hud-fullscreen" type="button" class="tool-btn hidden" data-icon="fullscreen" data-i18n-title="fullscreen" data-i18n-aria="fullscreen" aria-label="Во весь экран"></button>
+          <button id="btn-hud-mixer" type="button" class="tool-btn" data-icon="settings" data-i18n-title="settings" data-i18n-aria="settings" aria-label="Настройки"></button>
+          <button id="btn-modal-replay-intro" type="button" class="tool-btn hidden" data-icon="film" data-i18n-title="intro" data-i18n-aria="intro" aria-label="Заставка"></button>
+        </div>
+      </div>
+
+      <!-- In-Board Cinematic Showcase / Game Over Orbit Skip Pill -->
+      <button id="cinematic-skip-banner" type="button" class="cinematic-skip-banner hidden" data-i18n-title="skipCinematic" title="Пропустить">
+        <span id="cinematic-skip-label"></span>
+        <span class="skip-key-hint" data-i18n="skipCinematic">Пропустить</span>
+      </button>
+
+      <!-- Mobile / Touch D-Pad + Fire Controls -->
+      <div id="touch-controls-layer" class="touch-controls-layer" aria-label="Сенсорное управление танком">
+        <div id="touch-dpad" class="touch-dpad">
+          <button id="btn-dpad-up" type="button" class="dpad-btn dpad-up" data-i18n-aria="up" aria-label="Вверх">▲</button>
+          <button id="btn-dpad-left" type="button" class="dpad-btn dpad-left" data-i18n-aria="left" aria-label="Влево">◀</button>
+          <button id="btn-dpad-right" type="button" class="dpad-btn dpad-right" data-i18n-aria="right" aria-label="Вправо">▶</button>
+          <button id="btn-dpad-down" type="button" class="dpad-btn dpad-down" data-i18n-aria="down" aria-label="Вниз">▼</button>
+        </div>
+        <button id="btn-touch-fire" type="button" class="btn-touch-fire" data-i18n="fire" data-i18n-aria="fire" aria-label="Огонь">ОГОНЬ</button>
+      </div>
+
+      <footer class="bottom-bar">
+        <nav id="controls-dock" class="controls-dock dev-only" aria-label="Отладочные ракурсы комнаты (только ?dev=1)">
+          <button id="btn-replay-intro" type="button" class="tactile-btn btn-nostalgia" title="Повторить кинематографическую заставку (Назад в 1995)">🎬 НАЗАД В 1995</button>
+
+          <div class="dock-divider" aria-hidden="true"></div>
+
+          <button id="btn-board" type="button" class="tactile-btn active" title="Игровое поле на столе">🎮 ИГРОВОЕ ПОЛЕ</button>
+          <button id="btn-room" type="button" class="tactile-btn" title="Общий план комнаты (окно, ТВ, ковёр, постеры, стол)">🏠 КОМНАТА 1995</button>
+          <button id="btn-tv-front" type="button" class="tactile-btn" title="ЭЛТ-телевизор с игрой">📺 ТЕЛЕВИЗОР</button>
+          <button id="btn-console" type="button" class="tactile-btn" title="Dendy Junior, картриджи и ковёр">🕹️ DENDY</button>
+          <button id="btn-posters" type="button" class="tactile-btn" title="Книжная полка и постеры Nirvana и КИНО">🖼️ ПОСТЕРЫ</button>
+          <button id="btn-window" type="button" class="tactile-btn" title="Окно, кружевная тюль и чугунная батарея МС-140">🪟 ОКНО</button>
+          <button id="btn-tv-side" type="button" class="tactile-btn" title="Ракурс 3/4 на письменный стол и тетрадь">📐 СТОЛ 3/4</button>
+          <button id="btn-topdown" type="button" class="tactile-btn" title="Вид сверху">🗺️ КАРТА 2D</button>
+
+          <div class="dock-divider" aria-hidden="true"></div>
+
+          <button id="btn-reset" type="button" class="tactile-btn" title="Сбросить камеру к текущему ракурсу">🔄 СБРОС</button>
+          <button id="btn-turntable" type="button" class="tactile-btn" title="Плавное автоматическое вращение камеры">🔁 ОБХОД</button>
+        </nav>
+
+                <div class="telemetry-badge dev-only">
+          <div>FPS: <span id="meta-fps">60</span></div>
+          <div>GPU: <span id="meta-renderer">WebGL 2.0</span></div>
+          <div>РЕЖИМ: <span id="meta-state">BOARD_VIEW</span></div>
+        </div>
+      </footer>
+    </div>
+    <!-- Room inspection (v10 test build): points of interest, a limited free look, a way back to the game -->
+      <div id="room-inspect-ui" class="room-inspect-ui hidden" role="region" data-i18n-aria="roomInspectAria" aria-label="Осмотр комнаты">
+        <div class="ri-top">
+          <span class="ri-title" data-i18n="roomInspectTitle">КОМНАТА 1995</span>
+          <button id="btn-room-return" type="button" class="btn-primary-gold" data-i18n="roomReturn">Вернуться к игре</button>
+        </div>
+        <div id="ri-loading" class="ri-loading hidden" data-i18n="roomLoading">Загружаю…</div>
+        <div class="ri-bottom">
+          <div class="ri-hint" data-i18n="roomHint">Вращение: палец или мышь · приближение: щипок или колесо</div>
+          <div id="ri-chips" class="ri-chips"></div>
+        </div>
+      </div>
+
+  </main>
+
+</body>
+</html>

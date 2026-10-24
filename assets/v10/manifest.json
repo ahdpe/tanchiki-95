@@ -1,0 +1,100 @@
+{
+ "base": {
+  "file": "room_base.glb",
+  "objects": 84,
+  "triangles": 145600,
+  "bytes": 6942680,
+  "seconds": 4
+ },
+ "tv": {
+  "file": "room_tv.glb",
+  "objects": 50,
+  "triangles": 47395,
+  "bytes": 2311004,
+  "seconds": 2
+ },
+ "window": {
+  "file": "room_window.glb",
+  "objects": 142,
+  "triangles": 132920,
+  "bytes": 5205148,
+  "seconds": 3
+ },
+ "shelf": {
+  "file": "room_shelf.glb",
+  "objects": 53,
+  "triangles": 53926,
+  "bytes": 2964568,
+  "seconds": 2
+ },
+ "chair": {
+  "file": "room_chair.glb",
+  "objects": 17,
+  "triangles": 106501,
+  "bytes": 3296580,
+  "seconds": 1
+ },
+ "_meta": {
+  "source": "phase6_film60_v07.blend (PUBLIC)",
+  "frame": 1500,
+  "texture_cap": 1024,
+  "decimated": {
+   "F64_C3_Jeans": [
+    36844
+   ],
+   "F64_C3_ShoeBag": [
+    17464
+   ],
+   "F64_C3_Sweatshirt": [
+    50520
+   ],
+   "F64_Pelargonium_Leaves": [
+    13824
+   ],
+   "Hero_Lace_Tulle_Curtain": [
+    129024
+   ],
+   "Hero_Side_Drape_Curtain": [
+    46080
+   ],
+   "MS140_CastSection_01": [
+    11116
+   ],
+   "MS140_CastSection_02": [
+    11116
+   ],
+   "MS140_CastSection_03": [
+    11116
+   ],
+   "MS140_CastSection_04": [
+    11116
+   ],
+   "MS140_CastSection_05": [
+    11116
+   ],
+   "MS140_CastSection_06": [
+    11116
+   ],
+   "MS140_CastSection_07": [
+    11116
+   ],
+   "MS140_CastSection_08": [
+    11116
+   ],
+   "MS140_CastSection_09": [
+    11116
+   ],
+   "MS140_CastSection_10": [
+    11116
+   ]
+  },
+  "personal_textures_replaced": [
+   "cheat_note.png",
+   "notebook_pages_grid.jpg",
+   "notebook_pages_lined.jpg",
+   "diary_cover_worn.jpg",
+   "notebook_blue.jpg"
+  ],
+  "seconds": 19
+ }
+}

@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "note": "FINAL intro films: Cycles 128 samples, 60 s, 30 fps (PUBLIC edition, checkpoint4 of the v09 scene), encoded by art/scripts/v09/encode_web_intro.sh from renders/film60_final/PUBLIC_H and PUBLIC_V. Silent films; the sound is the separate track (approved mix premix_C_goldstar.wav as AAC and Opus).",
+  "audio": { "m4a": "intro_public_music.m4a", "webm": "intro_public_music.webm", "duration": 60 },
+  "variants": [
+    { "id": "landscape_1080", "orientation": "landscape", "width": 1920, "height": 1080, "mp4": "intro_public_landscape_1080.mp4", "webm": "intro_public_landscape_1080.webm", "poster": "intro_public_landscape_1080_poster.jpg", "tier": "final" },
+    { "id": "landscape_720", "orientation": "landscape", "width": 1280, "height": 720, "mp4": "intro_public_landscape_720.mp4", "webm": "intro_public_landscape_720.webm", "poster": "intro_public_landscape_720_poster.jpg", "tier": "final" },
+    { "id": "portrait_720", "orientation": "portrait", "width": 720, "height": 1280, "mp4": "intro_public_portrait_720.mp4", "webm": "intro_public_portrait_720.webm", "poster": "intro_public_portrait_720_poster.jpg", "tier": "final" },
+    { "id": "portrait_1080", "orientation": "portrait", "width": 1080, "height": 1920, "mp4": "intro_public_portrait_1080.mp4", "webm": "intro_public_portrait_1080.webm", "poster": "intro_public_portrait_1080_poster.jpg", "tier": "final" }
+  ]
+}
